@@ -1,0 +1,333 @@
+---
+title: "PREDIKSI VOLATILITAS HARGA SAHAM CLOSE Samsung Electronics Co., Ltd."
+author: "Kelompok 11"
+date: "2023-12-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+sumber data : [Samsung Electronics Co., Ltd.](https://finance.yahoo.com/quote/005930.KS?p=005930.KS&.tsrc=fin-srch)
+
+# PREPOCESSING DATA
+
+```{r}
+library(lmtest)
+library(forecast)
+library(tseries) 
+library(TTR)
+library(TSA)
+library(graphics)
+library(readr)
+library(stats)
+library(dplyr)
+library(astsa)
+library(lmtest)
+library(aTSA)
+library(fGarch)
+library(MASS)
+library(dynlm)
+library(readr)
+```
+
+```{r}
+data<- read_csv("C:/Users/MY ASUS/Downloads/005930.KS.csv")
+data
+```
+
+```{r}
+dt<- data[,-c(2,3,4,6,7)]
+dt
+```
+
+```{r}
+dt$Date = as.Date(dt$Date, format = "%m/%d/%Y")
+dates = data.frame(Date = seq(as.Date('2000-11-01'), as.Date('2023-11-01'), by = 'days'))
+data_gabung<- merge(dt,dates,by="Date", all = T)
+data<-na.locf(data_gabung, fromLast = TRUE)
+tail(data,10)
+
+```
+
+```{r}
+na.omit(data)
+
+```
+
+```{r}
+data$Close <- as.numeric(data$Close)
+```
+
+# MENGUBAH DATA MENJADI TIME SERIES
+
+```{r}
+myr<- ts(data$Close, frequency = 365, start = c(2000,11,1),end= c(2023,11,01))
+myr
+```
+
+# MENGECEK KESTASIONERAN DATA
+
+```{r}
+plot.ts(myr)
+```
+
+```{r}
+adf.test(myr)
+
+```
+
+```{r}
+acf(myr)
+pacf(myr)
+```
+
+## Differencing Data
+
+```{r}
+myrStat <- diff(myr)
+adf.test(myrStat)
+
+```
+
+```{r}
+acf(myrStat)
+pacf(myrStat)
+
+```
+
+```{r}
+eacf(myrStat)
+```
+
+| MODEL TENTATIF |
+|----------------|
+| ARIMA(1,1,1)   |
+| ARIMA(1,1,0)   |
+| ARIMA(0,1,1)   |
+| ARIMA(1,1,2)   |
+| ARIMA(2,1,1)   |
+| ARIMA(2,1,2)   |
+
+```{r}
+modelku<- arima(myrStat,order=c(1,1,1))
+modelku
+```
+
+```{r}
+modelku1<- arima(myrStat,order=c(0,1,1))
+modelku1
+```
+
+```{r}
+modelku2<- arima(myrStat,order=c(1,1,0))
+modelku2
+```
+
+```{r}
+modelku3<- arima(myrStat,order=c(1,1,2))
+modelku3
+```
+
+```{r}
+modelku4<- arima(myrStat,order=c(2,1,1))
+modelku4
+```
+
+```{r}
+modelku5<- arima(myrStat,order=c(2,1,2))
+modelku5
+```
+
+```{r}
+modelku6<- auto.arima(myrStat)
+modelku6
+```
+
+## Perbandingan AIC MODEL
+
++----------------+--------------+
+| MODEL TENTATIF | AIC          |
++================+==============+
+| ARIMA(1,1,1)   | ```          |
+|                | 126861.4     |
+|                | ```          |
++----------------+--------------+
+| ARIMA(1,1,0)   | ```          |
+|                | 126871.9     |
+|                | ```          |
++----------------+--------------+
+| ARIMA(0,1,1)   | ```          |
+|                | 126871.9     |
+|                | ```          |
++----------------+--------------+
+| ARIMA(1,1,2)   | ```          |
+|                | 126861.7     |
+|                | ```          |
++----------------+--------------+
+| ARIMA(2,1,1)   | ```          |
+|                | 126860.1     |
+|                | ```          |
++----------------+--------------+
+| ARIMA(2,1,2)   | ```          |
+|                | 126863.8     |
+|                | ```          |
++----------------+--------------+
+| ARIMA(4,0,1)   | ```          |
+|                | 126860.7     |
+|                | ```          |
++----------------+--------------+
+
+## MODEL YANG DIPILIH ARIMA(2,1,1)
+
+```{r}
+coeftest(modelku4)
+```
+
+# UJI DIAGNOSTIK
+
+## UJI WHITE NOISE
+
+```{r}
+Box.test(modelku4$residuals, type = "Ljung")
+
+```
+
+## UJI DISTRIBUSI NORMAL
+
+```{r}
+jarque.bera.test(modelku4$residuals)
+
+```
+
+```{r}
+qqnorm(modelku4$residuals)
+qqline(modelku4$residuals)
+```
+
+# ARCH EFEK
+
+```{r}
+library(FinTS)
+ArchTest(modelku4$residuals)
+#h0  : model kita varians residualnya konstan ( gaada efek arch)
+#h1 : model kita varian residualnya tidak konstan ( ada efek arch)
+
+#p-value < alpha , Tolak h0
+```
+
+ada efek archnya , sehingga bisa dimodelkan
+
+# MODEL ARCH
+
+```{r}
+r = resid(modelku4)
+rr = r^2
+par(mfrow=c(1,2))
+acf(as.vector(rr), main='ACF of Squared Residuals');
+pacf(as.vector(rr), main='PACF of Squared Residuals')
+
+
+```
+
+```{r}
+library(rugarch)
+modelarchku = garchFit(~ arma(2,1)+garch(1,0), data = myrStat, trace = F )
+summary(modelarchku)
+```
+
+```{r}
+library(rugarch)
+modelarchku = garchFit(~ arma(2,1)+garch(2,0), data = myrStat, trace = F )
+summary(modelarchku)
+```
+
+```{r}
+library(rugarch)
+modelarchku = garchFit(~ arma(2,1)+garch(5,0), data = myrStat, trace = F )
+summary(modelarchku)
+```
+
+```{r}
+library(rugarch)
+modelarchku1 = garchFit(~ arma(2,1)+garch(7,0), data = myrStat, trace = F )
+summary(modelarchku1)
+```
+
+# PERBANDINGAN NILAI AIC  MODEL ARCH(P)
+
++---------------+--------------+
+| MODEL ARCH(P) | AIC          |
++===============+==============+
+| MODEL ARCH(1) | ```          |
+|               | 14.95857     |
+|               | ```          |
++---------------+--------------+
+| MODEL ARCH(2) | ```          |
+|               | 14.92346     |
+|               | ```          |
++---------------+--------------+
+| MODEL ARCH(5) | ```          |
+|               | 14.77039     |
+|               | ```          |
++---------------+--------------+
+| MODEL ARCH(7) | ```          |
+|               | 14.55165     |
+|               | ```          |
++---------------+--------------+
+
+berdasarkan nilai aic ke empat model , didaptkan bahwa model ARCH( 7 ) memiliki nilai AIC lebih kecil
+
+# PEMBENTUKAN MODEL
+
+## MODEL ARCH(7)
+
+$$
+\sigma^{2}_{t}= \alpha_{0}+\alpha_{1}e_{t-1}^{2}+\alpha_{2}e_{t-2}^{2} + .... +\alpha_{p}e_{t-p}^{2} 
+$$
+
+$$
+\sigma^{2}_{t}= 2.168e^{04}+2.406e^{-01}\epsilon_{t-1}^{2}+7.352e^{-02}\epsilon_{t-2}^{2} +6.871e^{-02}\epsilon_{t-3}^{2}+1.937ee^{-02}\epsilon_{t-4}^{2}+6.861e^{-02}\epsilon_{t-5}^{2}+2.522e^{-01}\epsilon_{t-6}^{2}+5.59e^{-01}\epsilon_{t-7}^{2}
+$$
+
+## MODEL ARIMA ( 2,1,1)
+
+$$
+(1-B)^{d}X_{t} = \mu +\phi_{1}X_{t-1}+\phi_{2}X_{t-2}+...+\phi_{p}X_{t-p}+\theta_{1}e_{t-1}-\theta_{2}e_{t-2}-...-\theta{q}e_{t-q} + e_{t}
+$$
+
+$$
+(1-B)^{1}X_{t} = 1.991e^{+01}+8.217e^{-01}X_{t-1}+(-8.560)e^{-02}X_{t-2}+(-8.047)e^{-01}_{t-1}+ e_{t}
+$$
+
+## MODEL ARIMA + ARCH
+
+$$
+Y_{t}=1.991e^{+01}+8.217e^{-01}X_{t-1}+(-8.560)e^{-02}X_{t-2}+(-8.047)e^{-01}_{t-1}+ e_{t}+ 2.168e^{04}+2.406e^{-01}\epsilon_{t-1}^{2}+7.352e^{-02}\epsilon_{t-2}^{2} +6.871e^{-02}\epsilon_{t-3}^{2}+1.937ee^{-02}\epsilon_{t-4}^{2}+6.861e^{-02}\epsilon_{t-5}^{2}+2.522e^{-01}\epsilon_{t-6}^{2}+5.59e^{-01}\epsilon_{t-7}^{2}
+$$
+
+## PREDIKSI VOLATILITAS 
+
+prediksi pergerakan volatilitas 10 hari kedepan data harga saham close samsung pada November 2024
+
+```{r}
+predict(modelarchku1, n.ahead=10, plot=TRUE, nx=366)
+
+```
+
+Garis biru : Batas Interval Atas Data Asli
+
+Garis merah : Data Prediksi
+
+Garis Hijau : Batas Interval Bawah Data Asli
+
+Plot menunjukan bahwa data prediksi berada di dalam selang kepercayaan data asli yang mengartikan bahwa model berhasil melakukan prediksi votalitas harga saham close Samsung pada tahun 2024 .
+
+# Kesimpulan
+
+Volatilitas merupakan besarnya jarak antar fluktuasi suatu harga saham yang dapat direpresentasikan dengan nilai standar deviasi. Semakin tinggi tingkat volatilitasnya , semakin tinggi pula harga saham akan naik dan turun secara cepat.
+
+$$
+Y_{t}=1.991e^{+01}+8.217e^{-01}X_{t-1}+(-8.560)e^{-02}X_{t-2}+(-8.047)e^{-01}_{t-1}+ e_{t}+ 2.168e^{04}+2.406e^{-01}\epsilon_{t-1}^{2}+7.352e^{-02}\epsilon_{t-2}^{2} +6.871e^{-02}\epsilon_{t-3}^{2}+1.937ee^{-02}\epsilon_{t-4}^{2}+6.861e^{-02}\epsilon_{t-5}^{2}+2.522e^{-01}\epsilon_{t-6}^{2}+5.59e^{-01}\epsilon_{t-7}^{2}
+$$
+
+Model diatas dapat memprediksi pergerakan volatilitas pada data harga saham close Samsung Pada November 2024 Mendatang yang ditunjukkan dengan nilai prediksi berada diantara selang kepecayaan data asli. Hasil prediksi volatiltas dapat dilihat pada nilai standar deviasinya, jika diambil salah satu contoh standard deviasi pada harga saham close samsung menunjukkan nilai tertinggi sebesar 1132.7281 pada hari keenam yang mana nilai tersebut menunjukan nilai volatilitas yang tinggi pada harga saham close samsung pada hari keenam di bulan november 2024 yang mengartikan resiko investasi yang tinggi.
